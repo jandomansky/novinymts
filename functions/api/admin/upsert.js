@@ -1,7 +1,10 @@
 export async function onRequestPost({ request, env }) {
-  // jednoduché zabezpečení
   const auth = request.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+
+  const token = auth.startsWith("Bearer ")
+    ? auth.slice(7)
+    : auth;
+
   if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) {
     return new Response("Unauthorized", { status: 401 });
   }
