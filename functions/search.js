@@ -473,7 +473,7 @@
     // =========================
     // Konfigurace
     // =========================
-    const API_PATH = "api/search"; // změň, pokud máš jinak
+    const API_PATH = "/api/search"; // změň, pokud máš jinak
     const DEFAULT_LIMIT = 20;
     const DEBOUNCE_MS = 220;
 
