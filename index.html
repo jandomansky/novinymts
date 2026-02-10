@@ -416,6 +416,44 @@
       ev.preventDefault();
       doSearch($q.value);
     });
+const $askBtn = document.querySelector("#askBtn");
+
+async function doAsk(promptText){
+  const trimmed = (promptText || "").trim();
+  if (!trimmed) return;
+
+  setLoading(true);
+  $metaLeft.innerHTML = `AI hledám: <strong>${escapeHtml(trimmed)}</strong>`;
+
+  try{
+    const res = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "content-type":"application/json", "accept":"application/json" },
+      body: JSON.stringify({ prompt: trimmed, limit: 20 })
+    });
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+
+    if (!data.ok) throw new Error(data.error || "AI search failed");
+
+    // tady je FTS dotaz, který AI vymyslela:
+    // data.ai.query
+    $metaLeft.innerHTML =
+      `AI dotaz: <strong>${escapeHtml(data.ai.query)}</strong> · Nalezeno: <strong>${(data.results||[]).length}</strong>`;
+
+    renderResults(trimmed, data.results || []);
+  }catch(e){
+    renderError(e.message || "Nepodařilo se načíst AI výsledky.");
+  }finally{
+    setLoading(false);
+  }
+}
+
+$askBtn.addEventListener("click", ()=>{
+  // bere text z tvého inputu
+  doAsk($q.value);
+});
 
     // Enter in input works; optional: auto-search on typing (zakomentované)
     // let t;
