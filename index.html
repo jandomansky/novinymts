@@ -323,7 +323,7 @@
     const $btnText = document.getElementById("btnText");
     const $metaLeft = document.getElementById("metaLeft");
     const $results = document.getElementById("results");
-
+const $askBtn = document.querySelector("#askBtn");
     function escapeHtml(s){
       return String(s ?? "")
         .replaceAll("&","&amp;")
@@ -378,6 +378,42 @@
 
       $results.innerHTML = html;
     }
+async function doAsk(promptText) {
+  const trimmed = (promptText || "").trim();
+  if (!trimmed) return;
+
+  setLoading(true);
+  $metaLeft.innerHTML =
+    `AI hledám: <strong>${escapeHtml(trimmed)}</strong>`;
+
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "accept": "application/json"
+      },
+      body: JSON.stringify({
+        prompt: trimmed,
+        limit: 20
+      })
+    });
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "AI search failed");
+
+    $metaLeft.innerHTML =
+      `AI dotaz: <strong>${escapeHtml(data.ai.query)}</strong> · Nalezeno: <strong>${data.results.length}</strong>`;
+
+    renderResults(trimmed, data.results || []);
+  } catch (e) {
+    renderError(e.message || "AI hledání selhalo");
+  } finally {
+    setLoading(false);
+  }
+}
 
     async function doSearch(q){
       const trimmed = (q || "").trim();
@@ -449,6 +485,9 @@ async function doAsk(promptText){
     setLoading(false);
   }
 }
+$askBtn.addEventListener("click", () => {
+  doAsk($q.value);
+});
 
 $askBtn.addEventListener("click", ()=>{
   // bere text z tvého inputu
