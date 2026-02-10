@@ -1,54 +1,71 @@
-export async function onRequestGet({ request, env }) {
+export async function onRequest({ request, env }) {
+  const origin = request.headers.get("Origin") || "";
+  const allowed = [
+    "https://noviny.metrostav.cz",
+    "https://www.noviny.metrostav.cz",
+  ];
+
+  const allowOrigin = allowed.includes(origin) ? origin : allowed[0];
+
+  // Preflight (CORS)
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(allowOrigin),
+    });
+  }
+
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method not allowed" }, 405, allowOrigin);
+  }
+
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") || "").trim();
-  const limitRaw = parseInt(url.searchParams.get("limit") || "10", 10);
-  const limit = Math.min(Number.isFinite(limitRaw) ? limitRaw : 10, 50);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "10", 10), 50);
 
-  if (!q) return json({ q: "", results: [] });
+  if (!q) return json({ q: "", results: [] }, 200, allowOrigin);
 
   // FTS dotaz: prefixové vyhledávání po slovech
   const ftsQuery = q
     .split(/\s+/)
-    .map(t => escapeFtsToken(t))
     .filter(Boolean)
-    .map(t => `${t}*`)
+    .map(t => `${escapeFtsToken(t)}*`)
     .join(" ");
 
-  // když dotaz po vyčištění nic neobsahuje, vrať prázdno (ať to nepadá na FTS syntax error)
-  if (!ftsQuery) return json({ q, results: [] });
+  const stmt = env.DB.prepare(`
+    SELECT a.id,
+           a.url,
+           a.title,
+           a.published_at,
+           a.section,
+           snippet(articles_fts, 1, '<mark>', '</mark>', '…', 12) AS snippet
+    FROM articles_fts
+    JOIN articles a ON a.id = articles_fts.rowid
+    WHERE articles_fts MATCH ?
+    ORDER BY bm25(articles_fts) ASC
+    LIMIT ?;
+  `);
 
-  try {
-    const stmt = env.DB.prepare(`
-      SELECT a.id,
-             a.url,
-             a.title,
-             a.published_at,
-             a.section,
-             snippet(articles_fts, 1, '<mark>', '</mark>', '…', 12) AS snippet
-      FROM articles_fts
-      JOIN articles a ON a.id = articles_fts.rowid
-      WHERE articles_fts MATCH ?
-      ORDER BY bm25(articles_fts) ASC
-      LIMIT ?;
-    `);
-
-    const { results } = await stmt.bind(ftsQuery, Number(limit)).all();
-    return json({ q, results });
-  } catch (err) {
-    console.error("SEARCH_ERROR", { q, ftsQuery, err: String(err) });
-    return json(
-      { ok: false, error: "Search failed", detail: String(err) },
-      500
-    );
-  }
+  const { results } = await stmt.bind(ftsQuery, limit).all();
+  return json({ q, results }, 200, allowOrigin);
 }
 
-function json(obj, status = 200) {
+function corsHeaders(allowOrigin) {
+  return {
+    "access-control-allow-origin": allowOrigin,
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "access-control-max-age": "86400",
+    "cache-control": "no-store",
+  };
+}
+
+function json(obj, status = 200, allowOrigin) {
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
+      ...corsHeaders(allowOrigin),
     },
   });
 }
