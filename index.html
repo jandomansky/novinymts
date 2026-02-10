@@ -1,74 +1,433 @@
-<section class="panel">
-  <h2>Vyhledávání v Novinách Metrostavu</h2>
-  <p class="muted">Napiš dotaz a najdu relevantní články na noviny.metrostav.cz</p>
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vyhledávání v Novinách Metrostavu</title>
+  <meta name="description" content="Externí vyhledávač pro noviny.metrostav.cz" />
 
-  <div style="display:flex; gap:10px; margin-top:12px;">
-    <input id="q" type="search" placeholder="Např. tunel, Blanka, BOZP…" style="flex:1; padding:10px 12px; border-radius:10px;">
-    <button id="btn" style="padding:10px 14px; border-radius:10px;">Hledat</button>
-  </div>
-
-  <div id="meta" class="muted" style="margin-top:10px;"></div>
-  <div id="results" style="margin-top:14px;"></div>
-</section>
-<script>
-  const $q = document.getElementById("q");
-  const $btn = document.getElementById("btn");
-  const $meta = document.getElementById("meta");
-  const $results = document.getElementById("results");
-
-  function escapeHtml(s) {
-    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  async function runSearch() {
-    const q = ($q.value || "").trim();
-    if (!q) {
-      $meta.textContent = "";
-      $results.innerHTML = "";
-      return;
+  <style>
+    :root{
+      --bg: #0b1220;
+      --panel: rgba(255,255,255,.06);
+      --panel2: rgba(255,255,255,.09);
+      --border: rgba(255,255,255,.14);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.68);
+      --shadow: 0 18px 55px rgba(0,0,0,.38);
+      --radius: 18px;
+      --radius2: 14px;
+      --pad: 18px;
+      --accent: #7cc4ff;
+      --accent2: #b7ffcf;
     }
 
-    $meta.textContent = "Hledám…";
-    $results.innerHTML = "";
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% -10%, rgba(124,196,255,.18), transparent 55%),
+        radial-gradient(900px 600px at 90% 0%, rgba(183,255,207,.14), transparent 55%),
+        radial-gradient(900px 900px at 50% 120%, rgba(124,196,255,.10), transparent 55%),
+        var(--bg);
+    }
 
-    try {
-      const res = await fetch(`/search?q=${encodeURIComponent(q)}&limit=20`, { cache: "no-store" });
-      const data = await res.json();
+    a{ color:inherit; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
 
-      $meta.textContent = `Dotaz: "${data.q}" • Nalezeno: ${data.results.length}`;
+    .container{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 18px 60px;
+    }
 
-      if (!data.results.length) {
-        $results.innerHTML = `<div class="muted">Nic nenalezeno.</div>`;
+    .header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap: 6px;
+    }
+
+    .title{
+      font-size: clamp(26px, 3vw, 34px);
+      font-weight: 850;
+      letter-spacing: .2px;
+      line-height: 1.1;
+      margin:0;
+    }
+
+    .subtitle{
+      margin:0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+      user-select:none;
+    }
+
+    .panel{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+
+    .panel-inner{
+      padding: 18px;
+    }
+
+    .searchbar{
+      display:flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .input{
+      flex:1;
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      outline: none;
+      transition: 120ms ease;
+    }
+    .input::placeholder{ color: rgba(255,255,255,.45); }
+    .input:focus{
+      border-color: rgba(124,196,255,.45);
+      box-shadow: 0 0 0 4px rgba(124,196,255,.14);
+    }
+
+    .btn{
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(124,196,255,.45);
+      background: linear-gradient(180deg, rgba(124,196,255,.22), rgba(124,196,255,.10));
+      color: var(--text);
+      font-weight: 750;
+      cursor:pointer;
+      transition: 120ms ease;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+    }
+    .btn:hover{ transform: translateY(-1px); }
+    .btn:active{ transform: translateY(0px); }
+    .btn[disabled]{
+      opacity:.55;
+      cursor:not-allowed;
+      transform:none;
+    }
+
+    .meta{
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .meta strong{ color: var(--text); font-weight: 800; }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.10);
+      color: rgba(255,255,255,.72);
+      font-size: 12px;
+      user-select:none;
+    }
+
+    .results{
+      padding: 6px 10px 12px;
+    }
+
+    .result{
+      padding: 14px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      margin: 10px;
+      transition: 120ms ease;
+    }
+
+    .result:hover{
+      border-color: rgba(124,196,255,.30);
+      background: rgba(255,255,255,.05);
+      transform: translateY(-1px);
+    }
+
+    .result-title{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 10px;
+      margin: 0 0 6px;
+    }
+
+    .result-title a{
+      font-weight: 850;
+      line-height: 1.25;
+      font-size: 16px;
+    }
+
+    .result-meta{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+      align-items:flex-start;
+    }
+
+    .result-url{
+      display:block;
+      font-size: 12px;
+      color: rgba(255,255,255,.55);
+      margin-top: 8px;
+      word-break: break-all;
+    }
+
+    .snippet{
+      color: rgba(255,255,255,.78);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    mark{
+      background: rgba(183,255,207,.18);
+      border: 1px solid rgba(183,255,207,.25);
+      color: var(--text);
+      padding: 0 .28em;
+      border-radius: 8px;
+    }
+
+    .empty{
+      padding: 16px;
+      margin: 10px;
+      border-radius: 14px;
+      border: 1px dashed rgba(255,255,255,.18);
+      color: var(--muted);
+      background: rgba(255,255,255,.03);
+    }
+
+    .error{
+      padding: 14px 12px;
+      margin: 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,120,120,.35);
+      background: rgba(255,120,120,.08);
+      color: rgba(255,255,255,.85);
+    }
+
+    .footer{
+      margin-top: 10px;
+      color: rgba(255,255,255,.50);
+      font-size: 12px;
+    }
+    code{
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      padding: 2px 6px;
+      border-radius: 8px;
+    }
+
+    .spinner{
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: rgba(255,255,255,.80);
+      animation: spin 700ms linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px){
+      .searchbar{ flex-direction:column; }
+      .btn{ width:100%; }
+      .badge{ display:none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">
+        <h1 class="title">Vyhledávání v Novinách Metrostavu</h1>
+        <p class="subtitle">Externí vyhledávač pro <strong>noviny.metrostav.cz</strong> (indexované do vlastní DB).</p>
+      </div>
+      <div class="badge">⚡ rychlé • FTS5 • Pages + D1</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-inner">
+        <form id="form" class="searchbar" autocomplete="off">
+          <input id="q" class="input" type="search" name="q" placeholder="Např. tunel, Blanka, BOZP…" />
+          <button id="btn" class="btn" type="submit">
+            <span id="btnIcon" style="display:none" class="spinner" aria-hidden="true"></span>
+            <span id="btnText">Hledat</span>
+          </button>
+        </form>
+
+        <div class="meta">
+          <div id="metaLeft">Zadej dotaz.</div>
+          <div class="pill">Tip: sdílej odkaz <code>/?q=něco</code></div>
+        </div>
+      </div>
+
+      <div id="results" class="results"></div>
+    </div>
+
+    <div class="footer">
+      Pokud ti někdy vychází prázdno, znamená to, že do DB ještě nejsou nahrané články pro daný dotaz (nebo je potřeba reindex).
+    </div>
+  </div>
+
+  <script>
+    const $form = document.getElementById("form");
+    const $q = document.getElementById("q");
+    const $btn = document.getElementById("btn");
+    const $btnIcon = document.getElementById("btnIcon");
+    const $btnText = document.getElementById("btnText");
+    const $metaLeft = document.getElementById("metaLeft");
+    const $results = document.getElementById("results");
+
+    function escapeHtml(s){
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    function setLoading(on){
+      $btn.disabled = on;
+      $btnIcon.style.display = on ? "inline-block" : "none";
+      $btnText.textContent = on ? "Hledám…" : "Hledat";
+    }
+
+    function renderEmpty(q){
+      $results.innerHTML = `<div class="empty">Pro dotaz <strong>${escapeHtml(q)}</strong> jsem nic nenašla.</div>`;
+    }
+
+    function renderError(msg){
+      $results.innerHTML = `<div class="error"><strong>Chyba:</strong> ${escapeHtml(msg)}</div>`;
+    }
+
+    function renderResults(q, items){
+      if (!items?.length) return renderEmpty(q);
+
+      const html = items.map(r => {
+        const title = r.title || r.url;
+        const url = r.url || "#";
+        const section = r.section ? `<span class="pill">📌 ${escapeHtml(r.section)}</span>` : "";
+        const date = r.published_at ? `<span class="pill">🗓️ ${escapeHtml(r.published_at)}</span>` : "";
+
+        // snippet vrací server se <mark>…</mark> – vložíme jako HTML
+        const snippet = r.snippet ? r.snippet : "";
+
+        return `
+          <div class="result">
+            <div class="result-title">
+              <a href="${escapeHtml(url)}" target="_blank" rel="noopener">
+                ${escapeHtml(title)}
+              </a>
+              <div class="result-meta">
+                ${section}
+                ${date}
+              </div>
+            </div>
+            <div class="snippet">${snippet}</div>
+            <span class="result-url">${escapeHtml(url)}</span>
+          </div>
+        `;
+      }).join("");
+
+      $results.innerHTML = html;
+    }
+
+    async function doSearch(q){
+      const trimmed = (q || "").trim();
+      const url = new URL(window.location.href);
+      if (trimmed) url.searchParams.set("q", trimmed);
+      else url.searchParams.delete("q");
+      history.replaceState(null, "", url.toString());
+
+      if (!trimmed){
+        $metaLeft.textContent = "Zadej dotaz.";
+        $results.innerHTML = "";
         return;
       }
 
-      $results.innerHTML = data.results.map(r => `
-        <div style="padding:12px 0; border-bottom:1px solid rgba(255,255,255,.10);">
-          <div style="font-weight:700; margin-bottom:4px;">
-            <a href="${r.url}" target="_blank" rel="noopener" style="text-decoration:underline;">
-              ${escapeHtml(r.title || r.url)}
-            </a>
-          </div>
-          <div class="muted">${r.snippet || ""}</div>
-        </div>
-      `).join("");
+      setLoading(true);
+      $metaLeft.innerHTML = `Dotaz: <strong>${escapeHtml(trimmed)}</strong>`;
 
-    } catch (e) {
-      $meta.textContent = "";
-      $results.innerHTML = `<div class="muted">Chyba vyhledávání (zkus to za chvíli).</div>`;
+      try{
+        const res = await fetch(`/search?q=${encodeURIComponent(trimmed)}&limit=20`, { headers: { "accept":"application/json" }});
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        const count = data?.results?.length || 0;
+        $metaLeft.innerHTML = `Dotaz: <strong>${escapeHtml(trimmed)}</strong> • Nalezeno: <strong>${count}</strong>`;
+
+        renderResults(trimmed, data.results || []);
+      }catch(e){
+        renderError(e?.message || "Nepodařilo se načíst výsledky.");
+      }finally{
+        setLoading(false);
+      }
     }
-  }
 
-  $btn.addEventListener("click", runSearch);
-  $q.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") runSearch();
-  });
+    // submit
+    $form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      doSearch($q.value);
+    });
 
-  // pokud přijde q v URL: /?q=tunel
-  const params = new URL(location.href).searchParams;
-  const preset = params.get("q");
-  if (preset) {
-    $q.value = preset;
-    runSearch();
-  }
-</script>
+    // Enter in input works; optional: auto-search on typing (zakomentované)
+    // let t;
+    // $q.addEventListener("input", () => {
+    //   clearTimeout(t);
+    //   t = setTimeout(() => doSearch($q.value), 250);
+    // });
+
+    // init from URL param
+    const initQ = new URL(window.location.href).searchParams.get("q") || "";
+    $q.value = initQ;
+    if (initQ.trim()) doSearch(initQ);
+
+    // autofocus for convenience
+    $q.focus();
+  </script>
+</body>
+</html>
