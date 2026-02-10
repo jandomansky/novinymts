@@ -315,199 +315,159 @@
     </div>
   </div>
 
-  <script>
-    const $form = document.getElementById("form");
-    const $q = document.getElementById("q");
-    const $btn = document.getElementById("btn");
-    const $btnIcon = document.getElementById("btnIcon");
-    const $btnText = document.getElementById("btnText");
-    const $metaLeft = document.getElementById("metaLeft");
-    const $results = document.getElementById("results");
-const $askBtn = document.querySelector("#askBtn");
-    function escapeHtml(s){
-      return String(s ?? "")
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
-    }
+<script>
+  const $form = document.getElementById("form");
+  const $q = document.getElementById("q");
+  const $btn = document.getElementById("btn");
+  const $btnIcon = document.getElementById("btnIcon");
+  const $btnText = document.getElementById("btnText");
+  const $metaLeft = document.getElementById("metaLeft");
+  const $results = document.getElementById("results");
+  const $askBtn = document.getElementById("askBtn");
 
-    function setLoading(on){
-      $btn.disabled = on;
-      $btnIcon.style.display = on ? "inline-block" : "none";
-      $btnText.textContent = on ? "Hledám…" : "Hledat";
-    }
+  function escapeHtml(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
 
-    function renderEmpty(q){
-      $results.innerHTML = `<div class="empty">Pro dotaz <strong>${escapeHtml(q)}</strong> jsem nic nenašla.</div>`;
-    }
+  function setLoading(on){
+    $btn.disabled = on;
+    // volitelně: vypnout i AI tlačítko, ať nejde klikat během requestu
+    if ($askBtn) $askBtn.disabled = on;
 
-    function renderError(msg){
-      $results.innerHTML = `<div class="error"><strong>Chyba:</strong> ${escapeHtml(msg)}</div>`;
-    }
+    $btnIcon.style.display = on ? "inline-block" : "none";
+    $btnText.textContent = on ? "Hledám…" : "Hledat";
+  }
 
-    function renderResults(q, items){
-      if (!items?.length) return renderEmpty(q);
+  function renderEmpty(q){
+    $results.innerHTML = `<div class="empty">Pro dotaz <strong>${escapeHtml(q)}</strong> jsem nic nenašla.</div>`;
+  }
 
-      const html = items.map(r => {
-        const title = r.title || r.url;
-        const url = r.url || "#";
-        const section = r.section ? `<span class="pill">📌 ${escapeHtml(r.section)}</span>` : "";
-        const date = r.published_at ? `<span class="pill">🗓️ ${escapeHtml(r.published_at)}</span>` : "";
+  function renderError(msg){
+    $results.innerHTML = `<div class="error"><strong>Chyba:</strong> ${escapeHtml(msg)}</div>`;
+  }
 
-        // snippet vrací server se <mark>…</mark> – vložíme jako HTML
-        const snippet = r.snippet ? r.snippet : "";
+  function renderResults(q, items){
+    if (!items?.length) return renderEmpty(q);
 
-        return `
-          <div class="result">
-            <div class="result-title">
-              <a href="${escapeHtml(url)}" target="_blank" rel="noopener">
-                ${escapeHtml(title)}
-              </a>
-              <div class="result-meta">
-                ${section}
-                ${date}
-              </div>
+    const html = items.map(r => {
+      const title = r.title || r.url || "Bez názvu";
+      const url = r.url || "#";
+      const section = r.section ? `<span class="pill">📌 ${escapeHtml(r.section)}</span>` : "";
+      const date = r.published_at ? `<span class="pill">🗓️ ${escapeHtml(r.published_at)}</span>` : "";
+
+      // snippet může obsahovat <mark>…</mark> z backendu -> vkládáme jako HTML
+      const snippet = r.snippet ? r.snippet : "";
+
+      return `
+        <div class="result">
+          <div class="result-title">
+            <a href="${escapeHtml(url)}" target="_blank" rel="noopener">
+              ${escapeHtml(title)}
+            </a>
+            <div class="result-meta">
+              ${section}
+              ${date}
             </div>
-            <div class="snippet">${snippet}</div>
-            <span class="result-url">${escapeHtml(url)}</span>
           </div>
-        `;
-      }).join("");
+          <div class="snippet">${snippet}</div>
+          <span class="result-url">${escapeHtml(url)}</span>
+        </div>
+      `;
+    }).join("");
 
-      $results.innerHTML = html;
-    }
-async function doAsk(promptText) {
-  const trimmed = (promptText || "").trim();
-  if (!trimmed) return;
-
-  setLoading(true);
-  $metaLeft.innerHTML =
-    `AI hledám: <strong>${escapeHtml(trimmed)}</strong>`;
-
-  try {
-    const res = await fetch("/api/ask", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "accept": "application/json"
-      },
-      body: JSON.stringify({
-        prompt: trimmed,
-        limit: 20
-      })
-    });
-
-    if (!res.ok) throw new Error("HTTP " + res.status);
-
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "AI search failed");
-
-    $metaLeft.innerHTML =
-      `AI dotaz: <strong>${escapeHtml(data.ai.query)}</strong> · Nalezeno: <strong>${data.results.length}</strong>`;
-
-    renderResults(trimmed, data.results || []);
-  } catch (e) {
-    renderError(e.message || "AI hledání selhalo");
-  } finally {
-    setLoading(false);
+    $results.innerHTML = html;
   }
-}
 
-    async function doSearch(q){
-      const trimmed = (q || "").trim();
-      const url = new URL(window.location.href);
-      if (trimmed) url.searchParams.set("q", trimmed);
-      else url.searchParams.delete("q");
-      history.replaceState(null, "", url.toString());
+  async function doSearch(q){
+    const trimmed = (q || "").trim();
 
-      if (!trimmed){
-        $metaLeft.textContent = "Zadej dotaz.";
-        $results.innerHTML = "";
-        return;
-      }
+    const url = new URL(window.location.href);
+    if (trimmed) url.searchParams.set("q", trimmed);
+    else url.searchParams.delete("q");
+    history.replaceState(null, "", url.toString());
 
-      setLoading(true);
-      $metaLeft.innerHTML = `Dotaz: <strong>${escapeHtml(trimmed)}</strong>`;
-
-      try{
-        const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=20`, { headers: { "accept":"application/json" }});
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        const count = data?.results?.length || 0;
-        $metaLeft.innerHTML = `Dotaz: <strong>${escapeHtml(trimmed)}</strong> • Nalezeno: <strong>${count}</strong>`;
-
-        renderResults(trimmed, data.results || []);
-      }catch(e){
-        renderError(e?.message || "Nepodařilo se načíst výsledky.");
-      }finally{
-        setLoading(false);
-      }
+    if (!trimmed){
+      $metaLeft.textContent = "Zadej dotaz.";
+      $results.innerHTML = "";
+      return;
     }
 
-    // submit
-    $form.addEventListener("submit", (ev) => {
-      ev.preventDefault();
-      doSearch($q.value);
-    });
-const $askBtn = document.querySelector("#askBtn");
+    setLoading(true);
+    $metaLeft.innerHTML = `Dotaz: <strong>${escapeHtml(trimmed)}</strong>`;
 
-async function doAsk(promptText){
-  const trimmed = (promptText || "").trim();
-  if (!trimmed) return;
+    try{
+      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=20`, {
+        headers: { "accept":"application/json" }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
 
-  setLoading(true);
-  $metaLeft.innerHTML = `AI hledám: <strong>${escapeHtml(trimmed)}</strong>`;
+      const count = data?.results?.length || 0;
+      $metaLeft.innerHTML = `Dotaz: <strong>${escapeHtml(trimmed)}</strong> • Nalezeno: <strong>${count}</strong>`;
 
-  try{
-    const res = await fetch("/api/ask", {
-      method: "POST",
-      headers: { "content-type":"application/json", "accept":"application/json" },
-      body: JSON.stringify({ prompt: trimmed, limit: 20 })
-    });
-
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-
-    if (!data.ok) throw new Error(data.error || "AI search failed");
-
-    // tady je FTS dotaz, který AI vymyslela:
-    // data.ai.query
-    $metaLeft.innerHTML =
-      `AI dotaz: <strong>${escapeHtml(data.ai.query)}</strong> · Nalezeno: <strong>${(data.results||[]).length}</strong>`;
-
-    renderResults(trimmed, data.results || []);
-  }catch(e){
-    renderError(e.message || "Nepodařilo se načíst AI výsledky.");
-  }finally{
-    setLoading(false);
+      renderResults(trimmed, data.results || []);
+    }catch(e){
+      renderError(e?.message || "Nepodařilo se načíst výsledky.");
+    }finally{
+      setLoading(false);
+    }
   }
-}
-$askBtn.addEventListener("click", () => {
-  doAsk($q.value);
-});
 
-$askBtn.addEventListener("click", ()=>{
-  // bere text z tvého inputu
-  doAsk($q.value);
-});
+  async function doAsk(promptText){
+    const trimmed = (promptText || "").trim();
+    if (!trimmed){
+      $metaLeft.textContent = "Zadej dotaz.";
+      return;
+    }
 
-    // Enter in input works; optional: auto-search on typing (zakomentované)
-    // let t;
-    // $q.addEventListener("input", () => {
-    //   clearTimeout(t);
-    //   t = setTimeout(() => doSearch($q.value), 250);
-    // });
+    setLoading(true);
+    $metaLeft.innerHTML = `AI hledám: <strong>${escapeHtml(trimmed)}</strong>`;
 
-    // init from URL param
-    const initQ = new URL(window.location.href).searchParams.get("q") || "";
-    $q.value = initQ;
-    if (initQ.trim()) doSearch(initQ);
+    try{
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "content-type":"application/json", "accept":"application/json" },
+        body: JSON.stringify({ prompt: trimmed, limit: 20 })
+      });
 
-    // autofocus for convenience
-    $q.focus();
-  </script>
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "AI search failed");
+
+      $metaLeft.innerHTML =
+        `AI dotaz: <strong>${escapeHtml(data.ai?.query || "")}</strong> · Nalezeno: <strong>${(data.results||[]).length}</strong>`;
+
+      renderResults(trimmed, data.results || []);
+    }catch(e){
+      renderError(e?.message || "AI hledání selhalo");
+    }finally{
+      setLoading(false);
+    }
+  }
+
+  // submit -> klasické hledání
+  $form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    doSearch($q.value);
+  });
+
+  // klik na AI tlačítko
+  $askBtn.addEventListener("click", () => {
+    doAsk($q.value);
+  });
+
+  // init z URL parametru
+  const initQ = new URL(window.location.href).searchParams.get("q") || "";
+  $q.value = initQ;
+  if (initQ.trim()) doSearch(initQ);
+
+  $q.focus();
+</script>
+
 </body>
 </html>
